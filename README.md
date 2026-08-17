@@ -8,25 +8,39 @@ An ML-driven Digital Twin framework integrating demand forecasting, stochastic d
 
 ---
 
-## 📸 Project Preview
+## 📸 Project Preview & Interactive UI
 
-*(Place your Streamlit application screenshots in the `docs/screenshots/` folder)*
+<div align="center">
 
-| Dashboard | Demand Forecast |
+### 🖥️ Main Dashboard & ML Demand Forecasting
+*Real-time simulation controls (Play / Pause / Speed Slider), live operational KPI telemetry, and Linear Regression demand forecasting vs. actual ground truth.*
+
+[![Dashboard & Demand Forecast](docs/screenshots/dashboard-demand-forecast.png)](docs/screenshots/dashboard-demand-forecast.png)
+
+<br/>
+
+### 📦 Digital Twin Inventory Simulation & Reorder Decision Markers
+*Multi-policy tracking (`Adaptive`, `Adaptive + Safety Stock`, `Baseline`), dynamic reorder point triggers, stockout threshold monitoring, and real-time operational KPIs.*
+
+[![Inventory Simulation Markers](docs/screenshots/inventory-simulation-markers.png)](docs/screenshots/inventory-simulation-markers.png)
+
+<br/>
+
+### 💰 Cash Flow Simulation, Interactive Tooltip Markers & Policy Benchmarking
+*Interactive decision inspection, daily cash trajectory, volatility analysis (₹757 vs ₹1,951), and quantitative multi-policy performance benchmarking.*
+
+[![Cash Flow & Policy Comparison](docs/screenshots/cashflow-policy-comparison.png)](docs/screenshots/cashflow-policy-comparison.png)
+
+<br/>
+
+### 🧠 Standalone Experimental LSTM Neural Network Forecasting
+*Deep sequence modeling test predictions vs. ground truth demand alongside training loss convergence curve.*
+
+| LSTM Test Predictions | LSTM Training Loss |
 |:---:|:---:|
-| ![Dashboard](docs/screenshots/dashboard.png) | ![Demand Forecast](docs/screenshots/demand-forecast.png) |
+| ![LSTM Predictions](docs/lstm_test_predictions.png) | ![LSTM Loss](docs/lstm_training_loss.png) |
 
-| Inventory Simulation | Simulation Playback |
-|:---:|:---:|
-| ![Inventory Simulation](docs/screenshots/inventory-simulation.png) | ![Simulation Playback](docs/screenshots/simulation-playback.png) |
-
-| Cash Flow Simulation | Monte Carlo Risk Analysis |
-|:---:|:---:|
-| ![Cash Flow](docs/screenshots/cash-flow.png) | ![Monte Carlo](docs/screenshots/monte-carlo.png) |
-
-| Scenario Stress Testing | Policy Comparison |
-|:---:|:---:|
-| ![Scenario Analysis](docs/screenshots/scenario-analysis.png) | ![Policy Comparison](docs/screenshots/policy-comparison.png) |
+</div>
 
 ---
 
