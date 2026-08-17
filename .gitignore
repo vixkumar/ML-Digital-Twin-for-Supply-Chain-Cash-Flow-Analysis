@@ -2,9 +2,9 @@
 # ML-Driven Digital Twin — .gitignore
 # ============================================================
 
-# ---- Large Data Files (exceed GitHub 100MB limit) ----
-sales_train_evaluation.csv
-sell_prices.csv
+# ---- Large Raw Dump Files (>100MB) ----
+# (Repository includes optimized project CSV datasets directly)
+
 
 # ---- Python ----
 __pycache__/

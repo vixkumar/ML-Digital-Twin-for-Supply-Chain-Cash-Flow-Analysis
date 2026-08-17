@@ -306,10 +306,7 @@ Policies are compared using actual KPIs such as stockout rate, service level, av
    pip install -r requirements.txt
    ```
 
-4. **Download missing dataset files:**
-   Download `sales_train_evaluation.csv` and `sell_prices.csv` from the Kaggle M5 Competition and place them in the root directory.
-
-5. **Run the application:**
+4. **Run the application:**
    ```bash
    streamlit run app.py
    ```
@@ -339,11 +336,13 @@ Accepted for oral presentation at **ICSSIT 2026**.
 ## 📁 Project Structure
 
 ```text
-supply-chain-digital-twin-/
+ML-Digital-Twin-for-Supply-Chain-Cash-Flow-Analysis/
 ├── app.py                      # Main Streamlit dashboard application
 ├── digital_twin_main.py        # Core ML and simulation engine
 ├── lstm_forecasting.py         # Experimental LSTM module
-├── calendar.csv                # M5 calendar dataset (included)
+├── calendar.csv                # M5 calendar dataset
+├── sales_train_evaluation.csv  # M5 sales training dataset
+├── sell_prices.csv             # Sell prices dataset
 ├── requirements.txt            # Python dependencies
 ├── .gitignore                  # Git exclusion rules
 ├── README.md                   # Project documentation
@@ -352,8 +351,7 @@ supply-chain-digital-twin-/
     ├── screenshots/            # Application screenshots
     ├── TECHNICAL_CONTEXT.md    # Detailed technical context
     ├── PROJECT_EXPLANATION.md  # Detailed project explanation
-    ├── TECHNICAL_DOCUMENTATION.md
-    └── ER_DIAGRAM.md           # Entity relationship diagram
+    └── TECHNICAL_DOCUMENTATION.md
 ```
 
 ---
@@ -364,3 +362,4 @@ supply-chain-digital-twin-/
 - Cloud-distributed Monte Carlo simulation for higher iteration counts
 - Incorporation of probabilistic deep learning forecasting models
 - Multi-store and multi-SKU scaling capabilities
+
