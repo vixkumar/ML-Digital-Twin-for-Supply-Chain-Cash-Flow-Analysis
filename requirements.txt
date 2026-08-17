@@ -1,0 +1,23 @@
+# ============================================================
+# ML-Driven Digital Twin — Python Dependencies
+# ============================================================
+# Install: pip install -r requirements.txt
+# ============================================================
+
+# Core Data & ML
+pandas>=2.0.0
+numpy>=1.24.0
+scikit-learn>=1.3.0
+
+# Visualization
+plotly>=5.18.0
+matplotlib>=3.7.0
+
+# Dashboard
+streamlit>=1.28.0
+
+# ============================================================
+# Optional — LSTM Forecasting Module (lstm_forecasting.py)
+# Uncomment to install TensorFlow for the experimental LSTM model
+# ============================================================
+# tensorflow>=2.14.0

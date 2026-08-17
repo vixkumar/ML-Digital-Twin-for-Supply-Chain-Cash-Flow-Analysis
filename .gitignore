@@ -1,0 +1,51 @@
+# ============================================================
+# ML-Driven Digital Twin — .gitignore
+# ============================================================
+
+# ---- Large Data Files (exceed GitHub 100MB limit) ----
+sales_train_evaluation.csv
+sell_prices.csv
+
+# ---- Python ----
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ---- Virtual Environments ----
+venv/
+env/
+.venv/
+.env/
+
+# ---- IDE / Editor ----
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.settings/
+
+# ---- System ----
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- Generated / Runtime Files ----
+output.log
+digital_twin.db
+*.log
+
+# ---- Backup Files ----
+digital_twin_main_backup.py
+
+# ---- Secrets / Credentials ----
+.env
+*.key
+*.pem
+secrets.*
