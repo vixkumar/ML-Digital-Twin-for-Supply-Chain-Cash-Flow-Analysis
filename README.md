@@ -4,7 +4,7 @@
 
 An ML-driven Digital Twin framework integrating demand forecasting, stochastic demand modeling, inventory simulation, cash-flow modeling, Monte Carlo risk analysis, and policy evaluation for risk-aware supply chain decision making.
 
-**[🚀 Live Demo](https://supply-chain-digital-twin.streamlit.app/)** | **[📄 Research Paper](docs/research-paper.pdf)** | **[💻 GitHub Repository](https://github.com/vixkumar/supply-chain-digital-twin-)**
+**[🚀 Live Demo](https://supply-chain-digital-twin.streamlit.app/)** | **[📄 Research Paper](docs/research-paper.pdf)** | **[💻 GitHub Repository](https://github.com/vixkumar/ML-Digital-Twin-for-Supply-Chain-Cash-Flow-Analysis)**
 
 ---
 
@@ -291,8 +291,8 @@ Policies are compared using actual KPIs such as stockout rate, service level, av
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/vixkumar/supply-chain-digital-twin-.git
-   cd supply-chain-digital-twin-
+   git clone https://github.com/vixkumar/ML-Digital-Twin-for-Supply-Chain-Cash-Flow-Analysis.git
+   cd ML-Digital-Twin-for-Supply-Chain-Cash-Flow-Analysis
    ```
 
 2. **Create and activate a virtual environment:**
