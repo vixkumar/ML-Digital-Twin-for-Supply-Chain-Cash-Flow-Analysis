@@ -202,12 +202,21 @@ fixed_reorder_point = average_train_demand * lead_time
 residuals = y_test - predictions
 forecast_error_std = residuals.std()
 
+# Calculate actual demand variability for Monte Carlo
+actual_demand_std = y_test.std()
+
 # Service Level factor (Z) for 95%
 Z = 1.65
 safety_stock_val = Z * forecast_error_std * np.sqrt(lead_time)
 
+# Monte Carlo Safety Stock: Lower Z-score (0.84 = ~80% confidence) to show realistic risk
+Z_monte_carlo = 0.84
+monte_carlo_safety_stock = Z_monte_carlo * actual_demand_std * np.sqrt(lead_time)
+
 print(f"Forecast Error Std: {forecast_error_std:.2f}")
-print(f"Calculated Safety Stock: {safety_stock_val:.2f}")
+print(f"Actual Demand Std: {actual_demand_std:.2f}")
+print(f"Calculated Safety Stock (95% confidence): {safety_stock_val:.2f}")
+print(f"Monte Carlo Safety Stock (80% confidence): {monte_carlo_safety_stock:.2f}")
 
 # =========================
 # SIMULATION FUNCTION
@@ -242,7 +251,7 @@ def run_inventory_simulation(data, policy_type, reorder_point_val=None, safety_s
 
         # --- STOCHASTIC DEMAND (optional) ---
         if use_stochastic_demand:
-            _stochastic_std = stochastic_std if stochastic_std is not None else forecast_error_std
+            _stochastic_std = stochastic_std if stochastic_std is not None else actual_demand_std
             predicted_demand = max(0, np.random.normal(loc=predicted_demand, scale=_stochastic_std))
         # --- END STOCHASTIC DEMAND ---
         
@@ -585,9 +594,9 @@ def run_monte_carlo_simulation(n_runs=100):
         sim_result = run_inventory_simulation(
             test,
             policy_type='adaptive',
-            safety_stock=safety_stock_val,
+            safety_stock=monte_carlo_safety_stock,
             use_stochastic_demand=True,
-            stochastic_std=forecast_error_std
+            stochastic_std=actual_demand_std
         )
 
         # Calculate metrics for this run

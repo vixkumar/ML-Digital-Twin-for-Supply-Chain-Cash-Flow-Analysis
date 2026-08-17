@@ -561,6 +561,22 @@ selected_preds = st.session_state["selected_preds"]
 fc_results = st.session_state.get("fc_results")
 so_results = st.session_state.get("so_results")
 
+# ============================================================
+# SIMULATION PLAYBACK — SESSION STATE INIT
+# ============================================================
+# Determine total simulation length from first policy result
+_first_policy_key = list(results.keys())[0]
+_total_sim_steps = len(results[_first_policy_key])
+
+if "current_step" not in st.session_state:
+    st.session_state.current_step = _total_sim_steps  # show all by default
+
+if "playing" not in st.session_state:
+    st.session_state.playing = False
+
+# Clamp step to valid range
+st.session_state.current_step = max(0, min(st.session_state.current_step, _total_sim_steps))
+
 # ---- Display-only month tick labels (NO dataframe changes) ----
 # Build tick positions: first date of each calendar month → "Month 1", "Month 2"…
 _sim_dates_sorted = sim_data.sort_values("date")["date"]
@@ -587,198 +603,364 @@ POLICY_COLORS = {
 }
 
 # ============================================================
+# SIMULATION PLAYBACK CONTROLS
+# ============================================================
+MAX_POINTS = 300  # cap render points for performance
+
+st.markdown(
+    '<div style="background: linear-gradient(135deg, rgba(30,41,59,0.9), rgba(15,23,42,0.9)); '
+    'border: 1px solid rgba(99,102,241,0.25); border-radius: 14px; padding: 18px 24px; '
+    'margin-bottom: 18px; backdrop-filter: blur(10px);">'
+    '<div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">'
+    '<span style="font-size:1.2rem;">🎬</span>'
+    '<span style="color:#e2e8f0; font-weight:700; font-size:1.05rem;">Simulation Playback</span>'
+    '</div></div>',
+    unsafe_allow_html=True,
+)
+
+pb_col1, pb_col2, pb_col3, pb_col4, pb_col5, pb_col6 = st.columns([1, 1, 1, 2, 1, 2], gap="medium")
+
+with pb_col1:
+    if st.button("▶ Play", use_container_width=True, key="pb_play"):
+        st.session_state.playing = True
+        # If at end, restart from beginning
+        if st.session_state.current_step >= _total_sim_steps:
+            st.session_state.current_step = 0
+
+with pb_col2:
+    if st.button("⏸ Pause", use_container_width=True, key="pb_pause"):
+        st.session_state.playing = False
+
+with pb_col3:
+    if st.button("🔄 Reset", use_container_width=True, key="pb_reset"):
+        st.session_state.current_step = 0
+        st.session_state.playing = False
+
+with pb_col4:
+    step_size = st.select_slider(
+        "Playback Speed",
+        options=[1, 2, 5, 10, 20],
+        value=5,
+        key="pb_step_size",
+    )
+
+with pb_col5:
+    fast_mode = st.checkbox("⚡ Fast", key="pb_fast_mode")
+    if fast_mode:
+        step_size = 20
+
+with pb_col6:
+    # Progress bar and day counter
+    _progress_frac = st.session_state.current_step / _total_sim_steps if _total_sim_steps > 0 else 0
+    _play_status = "▶ Playing" if st.session_state.playing else "⏸ Paused"
+    st.markdown(
+        f'<div style="text-align:center; padding:8px 0;">'
+        f'<span style="color:#60a5fa; font-weight:700; font-size:1.3rem;">'
+        f'Day {st.session_state.current_step} / {_total_sim_steps}</span>'
+        f'<span style="color:#94a3b8; font-size:0.85rem; margin-left:12px;">{_play_status}</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+    st.progress(_progress_frac)
+
+# ---- Current step for slicing ----
+_step = st.session_state.current_step
+
+
+def _downsample(series_x, series_y, max_pts=MAX_POINTS):
+    """Downsample paired x/y data to at most max_pts for fast rendering."""
+    n = len(series_x)
+    if n <= max_pts:
+        return series_x, series_y
+    idx = np.linspace(0, n - 1, max_pts, dtype=int)
+    return series_x.iloc[idx] if hasattr(series_x, 'iloc') else series_x[idx], \
+           series_y.iloc[idx] if hasattr(series_y, 'iloc') else series_y[idx]
+
+
+def _downsample_df(df, max_pts=MAX_POINTS):
+    """Downsample a DataFrame to at most max_pts rows for fast rendering."""
+    if len(df) <= max_pts:
+        return df
+    idx = np.linspace(0, len(df) - 1, max_pts, dtype=int)
+    return df.iloc[idx]
+
+# ============================================================
 # CENTER + RIGHT PANELS
 # ============================================================
 col_center, col_right = st.columns([2.2, 1], gap="large")
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# CENTER PANEL — VISUALIZATIONS
+# CENTER PANEL — VISUALIZATIONS (with st.empty placeholders)
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Pre-sort full data once (avoid repeated sorting per rerun)
+_sorted_sim_data = sim_data.sort_values("date").reset_index(drop=True)
+_full_dates = _sorted_sim_data["date"]
+_full_actual = y_test.values
+_full_preds = selected_preds
+_tv, _tt = _build_month_ticks(_full_dates)  # compute ticks once
+
 with col_center:
-    st.markdown('<div class="section-header">📈 Demand Forecast</div>', unsafe_allow_html=True)
+    # ---- 1) Demand Forecast Chart (stepwise) ----
+    _demand_placeholder = st.empty()
+    with _demand_placeholder.container():
+        st.markdown('<div class="section-header">📈 Demand Forecast</div>', unsafe_allow_html=True)
 
-    # ---- 1) Demand Forecast Chart ----
-    fig_demand = go.Figure()
-    dates = sim_data.sort_values("date")["date"]
-    actual = y_test.values
+        fig_demand = go.Figure()
 
-    fig_demand.add_trace(go.Scatter(
-        x=dates, y=actual,
-        mode="lines", name="Actual Demand",
-        line=dict(color="#94a3b8", width=1.5, dash="dot"),
-        opacity=0.7,
-    ))
-    fig_demand.add_trace(go.Scatter(
-        x=dates, y=selected_preds,
-        mode="lines", name=f"Predicted ({forecast_model})",
-        line=dict(color=COLOR_ACCENT, width=2.5),
-    ))
-    _tv, _tt = _build_month_ticks(dates)
-    fig_demand.update_layout(
-        title=f"Actual vs Predicted Demand — {forecast_model}",
-        xaxis_title="Simulation Month", yaxis_title="Demand",
-        height=340,
-        **PLOTLY_LAYOUT,
-    )
-    fig_demand.update_xaxes(tickmode="array", tickvals=_tv, ticktext=_tt)
-    st.plotly_chart(fig_demand, use_container_width=True)
+        # Slice to current playback step
+        _dates_display = _full_dates.iloc[:_step]
+        _actual_display = _full_actual[:_step]
+        _preds_display = _full_preds[:_step]
 
-    # ---- 2) Inventory Simulation ----
-    st.markdown('<div class="section-header">📦 Inventory Simulation</div>', unsafe_allow_html=True)
+        # Downsample for fast rendering
+        _ds_dates_a, _ds_actual = _downsample(_dates_display, _actual_display)
+        _ds_dates_p, _ds_preds = _downsample(_dates_display, _preds_display)
 
-    fig_inv = go.Figure()
-    _inv_tick_set = False
-    for pname, sim_df in results.items():
-        color = POLICY_COLORS.get(pname, "#a78bfa")
-        sim_sorted = sim_df.sort_values("date")
-
-        fig_inv.add_trace(go.Scatter(
-            x=sim_sorted["date"], y=sim_sorted["inventory"],
-            mode="lines", name=pname,
-            line=dict(color=color, width=2.5 if "Safety" in pname else 2),
+        fig_demand.add_trace(go.Scatter(
+            x=_ds_dates_a, y=_ds_actual,
+            mode="lines", name="Actual Demand",
+            line=dict(color="#94a3b8", width=1.5, dash="dot"),
+            opacity=0.7,
         ))
-
-        # Reorder events
-        reorder_events = sim_sorted[sim_sorted["reorder_flag"] == 1]
-        fig_inv.add_trace(go.Scatter(
-            x=reorder_events["date"], y=reorder_events["inventory"],
-            mode="markers", name=f"{pname} — Reorder",
-            marker=dict(symbol="triangle-up", size=9, color=color, line=dict(width=1, color="white")),
-            showlegend=False,
+        fig_demand.add_trace(go.Scatter(
+            x=_ds_dates_p, y=_ds_preds,
+            mode="lines", name=f"Predicted ({forecast_model})",
+            line=dict(color=COLOR_ACCENT, width=2.5),
         ))
+        fig_demand.update_layout(
+            title=f"Actual vs Predicted Demand — {forecast_model}",
+            xaxis=dict(
+                title="Simulation Month",
+                range=[_full_dates.iloc[0], _full_dates.iloc[-1]],
+                gridcolor="rgba(148,163,184,0.08)",
+                tickmode="array", tickvals=_tv, ticktext=_tt,
+            ),
+            yaxis=dict(
+                title="Demand",
+                range=[min(_full_actual.min(), _full_preds.min()) * 0.95,
+                       max(_full_actual.max(), _full_preds.max()) * 1.05],
+                gridcolor="rgba(148,163,184,0.08)",
+            ),
+            height=340,
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(15,23,42,0.6)",
+            font=dict(family="Inter, sans-serif", color="#e2e8f0"),
+            margin=dict(l=40, r=20, t=50, b=40),
+            legend=dict(
+                bgcolor="rgba(15,23,42,0.7)",
+                bordercolor="rgba(59,130,246,0.15)",
+                borderwidth=1, font=dict(size=11),
+            ),
+            hoverlabel=dict(bgcolor="#1e293b", font_size=12, font_family="Inter"),
+        )
+        st.plotly_chart(fig_demand, use_container_width=True)
 
-        # Stockouts
-        stockouts = sim_sorted[sim_sorted["inventory"] < 0]
-        if len(stockouts) > 0:
+    # ---- 2) Inventory Simulation (stepwise, enhanced decision markers) ----
+    _inv_placeholder = st.empty()
+    with _inv_placeholder.container():
+        st.markdown('<div class="section-header">📦 Inventory Simulation — Decision Markers</div>', unsafe_allow_html=True)
+
+        fig_inv = go.Figure()
+        _inv_tick_set = False
+        _inv_y_min, _inv_y_max = 0, 0
+        _reorder_legend_shown = False   # only show one "Order Placed" legend entry
+        _stockout_legend_shown = False  # only show one "Stockout" legend entry
+
+        # Pre-build actual demand array aligned to sorted sim dates
+        _actual_demand_arr = y_test.values  # aligned with sorted test data
+
+        for pname, sim_df in results.items():
+            color = POLICY_COLORS.get(pname, "#a78bfa")
+            sim_sorted = sim_df.sort_values("date").reset_index(drop=True)
+
+            # Track full Y range
+            _inv_y_min = min(_inv_y_min, sim_sorted["inventory"].min())
+            _inv_y_max = max(_inv_y_max, sim_sorted["inventory"].max())
+
+            # Slice to current step & downsample
+            sim_display = sim_sorted.iloc[:_step]
+            sim_ds = _downsample_df(sim_display)
+
+            # ---- PART 1: Base inventory line (width 3) ----
+            # Rich hover: Inventory + Predicted Demand + Actual Demand
+            _hover_inv = sim_ds["inventory"].values
+            _hover_pred = sim_ds["predicted_sales"].values if "predicted_sales" in sim_ds.columns else None
+            _n_ds = len(sim_ds)
+            _hover_actual = _actual_demand_arr[:_step][
+                np.linspace(0, min(_step, len(_actual_demand_arr)) - 1, _n_ds, dtype=int)
+            ] if _step > 0 and _n_ds > 0 else np.array([])
+
+            _hover_texts = []
+            for _hi in range(_n_ds):
+                _ht = f"<b>Inventory:</b> {_hover_inv[_hi]:.1f}"
+                if _hover_pred is not None and _hi < len(_hover_pred):
+                    _ht += f"<br><b>Predicted Demand:</b> {_hover_pred[_hi]:.1f}"
+                if len(_hover_actual) > 0 and _hi < len(_hover_actual):
+                    _ht += f"<br><b>Actual Demand:</b> {_hover_actual[_hi]:.1f}"
+                _hover_texts.append(_ht)
+
             fig_inv.add_trace(go.Scatter(
-                x=stockouts["date"], y=stockouts["inventory"],
-                mode="markers", name=f"{pname} — Stockout",
-                marker=dict(symbol="x", size=8, color="#f87171"),
-                showlegend=False,
+                x=sim_ds["date"], y=sim_ds["inventory"],
+                mode="lines", name=pname,
+                line=dict(color=color, width=3),
+                hovertext=_hover_texts,
+                hoverinfo="text+x",
             ))
 
-        if not _inv_tick_set:
-            _inv_tv, _inv_tt = _build_month_ticks(sim_sorted["date"])
-            _inv_tick_set = True
+            # ---- PART 2: Reorder markers (green triangles) ----
+            reorder_events = sim_display[sim_display["reorder_flag"] == 1]
+            if len(reorder_events) > 0:
+                _show_reorder_legend = not _reorder_legend_shown
+                fig_inv.add_trace(go.Scatter(
+                    x=reorder_events["date"], y=reorder_events["inventory"],
+                    mode="markers",
+                    name="Order Placed",
+                    marker=dict(
+                        symbol="triangle-up", size=10,
+                        color="#10b981",
+                        line=dict(width=1.5, color="white"),
+                    ),
+                    showlegend=_show_reorder_legend,
+                    legendgroup="reorder",
+                    hovertemplate="<b>Order Placed</b><br>Inventory: %{y:.1f}<extra></extra>",
+                ))
+                _reorder_legend_shown = True
 
-    # Reorder point line (baseline)
-    sc_lt = sim_lead_time
-    rp_val = average_train_demand * sc_lt
-    fig_inv.add_hline(
-        y=rp_val, line_dash="dash", line_color="rgba(251,191,36,0.5)",
-        annotation_text="Reorder Point", annotation_position="top right",
-        annotation_font_color="#fbbf24",
-    )
-    # Zero line
-    fig_inv.add_hline(y=0, line_dash="solid", line_color="rgba(239,68,68,0.3)")
+                # ---- PART 4: Vertical dashed lines at reorder events ----
+                # Limit to max 15 vlines to avoid clutter
+                _vline_dates = reorder_events["date"].values
+                if len(_vline_dates) > 15:
+                    _vline_dates = _vline_dates[np.linspace(0, len(_vline_dates) - 1, 15, dtype=int)]
+                for _rd in _vline_dates:
+                    fig_inv.add_vline(
+                        x=_rd, line_dash="dash",
+                        line_color="rgba(16,185,129,0.2)", line_width=1,
+                    )
 
-    fig_inv.update_layout(
-        title="Inventory Levels Over Time",
-        xaxis_title="Simulation Month", yaxis_title="Inventory Units",
-        height=380,
-        **PLOTLY_LAYOUT,
-    )
-    fig_inv.update_xaxes(tickmode="array", tickvals=_inv_tv, ticktext=_inv_tt)
-    st.plotly_chart(fig_inv, use_container_width=True)
+            # ---- PART 3: Stockout markers (red X) ----
+            stockouts = sim_display[sim_display["inventory"] < 0]
+            if len(stockouts) > 0:
+                _show_stockout_legend = not _stockout_legend_shown
+                fig_inv.add_trace(go.Scatter(
+                    x=stockouts["date"], y=stockouts["inventory"],
+                    mode="markers",
+                    name="Stockout",
+                    marker=dict(
+                        symbol="x", size=10,
+                        color="#ef4444",
+                        line=dict(width=2, color="#ef4444"),
+                    ),
+                    showlegend=_show_stockout_legend,
+                    legendgroup="stockout",
+                    hovertemplate="<b>⚠️ Stockout</b><br>Inventory: %{y:.1f}<extra></extra>",
+                ))
+                _stockout_legend_shown = True
 
-    # ---- 3) Cash Flow Simulation ----
-    st.markdown('<div class="section-header">💰 Cash Flow Simulation</div>', unsafe_allow_html=True)
+            if not _inv_tick_set:
+                _inv_tv, _inv_tt = _build_month_ticks(sim_sorted["date"])
+                _inv_date_range = [sim_sorted["date"].iloc[0], sim_sorted["date"].iloc[-1]]
+                _inv_tick_set = True
 
-    fig_cash = go.Figure()
-    _cash_tick_set = False
-    for pname, sim_df in results.items():
-        color = POLICY_COLORS.get(pname, "#a78bfa")
-        sim_sorted = sim_df.sort_values("date")
-        fig_cash.add_trace(go.Scatter(
-            x=sim_sorted["date"], y=sim_sorted["cash_balance"],
-            mode="lines", name=pname,
-            line=dict(color=color, width=2.5 if "Safety" in pname else 2),
-            fill="tonexty" if pname == list(results.keys())[-1] else None,
-        ))
-        if not _cash_tick_set:
-            _cash_tv, _cash_tt = _build_month_ticks(sim_sorted["date"])
-            _cash_tick_set = True
+        # Reorder point line (baseline)
+        sc_lt = sim_lead_time
+        rp_val = average_train_demand * sc_lt
+        fig_inv.add_hline(
+            y=rp_val, line_dash="dash", line_color="rgba(251,191,36,0.5)",
+            annotation_text="Reorder Point", annotation_position="top left",
+            annotation_font_color="#fbbf24", annotation_font_size=10,
+        )
+        # Zero line (stockout threshold)
+        fig_inv.add_hline(
+            y=0, line_dash="solid", line_color="rgba(239,68,68,0.35)",
+            annotation_text="Stockout Threshold", annotation_position="bottom left",
+            annotation_font_color="rgba(248,113,113,0.7)", annotation_font_size=10,
+        )
 
-    fig_cash.update_layout(
-        title="Cash Balance Over Time — Policy Comparison",
-        xaxis_title="Simulation Month", yaxis_title="Cash (₹)",
-        height=360,
-        **PLOTLY_LAYOUT,
-    )
-    fig_cash.update_xaxes(tickmode="array", tickvals=_cash_tv, ticktext=_cash_tt)
-    st.plotly_chart(fig_cash, use_container_width=True)
+        fig_inv.update_layout(
+            title="Inventory Levels — Decision Markers",
+            xaxis=dict(
+                title="Simulation Month",
+                range=_inv_date_range,
+                gridcolor="rgba(148,163,184,0.08)",
+                tickmode="array", tickvals=_inv_tv, ticktext=_inv_tt,
+            ),
+            yaxis=dict(
+                title="Inventory Units",
+                range=[_inv_y_min * 1.1 if _inv_y_min < 0 else _inv_y_min * 0.9,
+                       _inv_y_max * 1.1],
+                gridcolor="rgba(148,163,184,0.08)",
+            ),
+            height=420,
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(15,23,42,0.6)",
+            font=dict(family="Inter, sans-serif", color="#e2e8f0"),
+            margin=dict(l=40, r=30, t=80, b=40),
+            legend=dict(
+                bgcolor="rgba(15,23,42,0.85)",
+                bordercolor="rgba(59,130,246,0.2)",
+                borderwidth=1, font=dict(size=10),
+                orientation="h", yanchor="bottom", y=1.08, xanchor="center", x=0.5,
+            ),
+            hoverlabel=dict(bgcolor="#1e293b", font_size=12, font_family="Inter"),
+        )
+        st.plotly_chart(fig_inv, use_container_width=True)
 
-    # ---- 4) Simulation Playback ----
-    st.markdown('<div class="section-header">▶️ Simulation Playback</div>', unsafe_allow_html=True)
+    # ---- 3) Cash Flow Simulation (stepwise) ----
+    _cash_placeholder = st.empty()
+    with _cash_placeholder.container():
+        st.markdown('<div class="section-header">💰 Cash Flow Simulation</div>', unsafe_allow_html=True)
 
-    # Use the first available policy for playback
-    playback_policy = list(results.keys())[0]
-    playback_df = results[playback_policy].sort_values("date").reset_index(drop=True)
-    playback_color = POLICY_COLORS.get(playback_policy, COLOR_ADAPTIVE)
+        fig_cash = go.Figure()
+        _cash_tick_set = False
+        _cash_y_min, _cash_y_max = float('inf'), float('-inf')
+        for pname, sim_df in results.items():
+            color = POLICY_COLORS.get(pname, "#a78bfa")
+            sim_sorted = sim_df.sort_values("date").reset_index(drop=True)
 
-    # Build animated frames
-    n_points = len(playback_df)
-    step_size = max(1, n_points // 50)  # ~50 frames for smooth animation
-    frame_indices = list(range(step_size, n_points, step_size))
-    if frame_indices[-1] != n_points - 1:
-        frame_indices.append(n_points - 1)
+            # Track full Y range
+            _cash_y_min = min(_cash_y_min, sim_sorted["cash_balance"].min())
+            _cash_y_max = max(_cash_y_max, sim_sorted["cash_balance"].max())
 
-    frames = []
-    for idx in frame_indices:
-        frames.append(go.Frame(
-            data=[go.Scatter(
-                x=playback_df["date"].iloc[:idx+1],
-                y=playback_df["inventory"].iloc[:idx+1],
-                mode="lines",
-                line=dict(color=playback_color, width=2.5),
-            )],
-            name=str(idx),
-        ))
+            # Slice to current step & downsample
+            sim_display = sim_sorted.iloc[:_step]
+            sim_ds = _downsample_df(sim_display)
 
-    fig_playback = go.Figure(
-        data=[go.Scatter(
-            x=[playback_df["date"].iloc[0]],
-            y=[playback_df["inventory"].iloc[0]],
-            mode="lines",
-            line=dict(color=playback_color, width=2.5),
-            name=f"{playback_policy} Inventory",
-        )],
-        frames=frames,
-    )
-    fig_playback.add_hline(y=0, line_dash="solid", line_color="rgba(239,68,68,0.3)")
+            fig_cash.add_trace(go.Scatter(
+                x=sim_ds["date"], y=sim_ds["cash_balance"],
+                mode="lines", name=pname,
+                line=dict(color=color, width=2.5 if "Safety" in pname else 2),
+            ))
+            if not _cash_tick_set:
+                _cash_tv, _cash_tt = _build_month_ticks(sim_sorted["date"])
+                _cash_date_range = [sim_sorted["date"].iloc[0], sim_sorted["date"].iloc[-1]]
+                _cash_tick_set = True
 
-    _pb_tv, _pb_tt = _build_month_ticks(playback_df["date"])
-    fig_playback.update_layout(
-        title=f"Inventory Evolution — {playback_policy} (Playback)",
-        xaxis=dict(
-            range=[playback_df["date"].iloc[0], playback_df["date"].iloc[-1]],
-            gridcolor="rgba(148,163,184,0.08)",
-            tickmode="array", tickvals=_pb_tv, ticktext=_pb_tt,
-            title="Simulation Month",
-        ),
-        yaxis=dict(
-            range=[playback_df["inventory"].min() * 1.1, playback_df["inventory"].max() * 1.1],
-            gridcolor="rgba(148,163,184,0.08)",
-        ),
-        updatemenus=[dict(
-            type="buttons",
-            showactive=False,
-            x=0.05, y=1.12,
-            buttons=[
-                dict(label="▶ Play", method="animate",
-                     args=[None, dict(frame=dict(duration=80, redraw=True), fromcurrent=True)]),
-                dict(label="⏸ Pause", method="animate",
-                     args=[[None], dict(frame=dict(duration=0, redraw=False), mode="immediate")]),
-            ],
-        )],
-        height=360,
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(15,23,42,0.6)",
-        font=dict(family="Inter, sans-serif", color="#e2e8f0"),
-        margin=dict(l=40, r=20, t=65, b=40),
-        hoverlabel=dict(bgcolor="#1e293b", font_size=12, font_family="Inter"),
-    )
-    st.plotly_chart(fig_playback, use_container_width=True)
+        fig_cash.update_layout(
+            title="Cash Balance Over Time — Policy Comparison",
+            xaxis=dict(
+                title="Simulation Month",
+                range=_cash_date_range,
+                gridcolor="rgba(148,163,184,0.08)",
+                tickmode="array", tickvals=_cash_tv, ticktext=_cash_tt,
+            ),
+            yaxis=dict(
+                title="Cash (₹)",
+                range=[_cash_y_min * 0.95, _cash_y_max * 1.05],
+                gridcolor="rgba(148,163,184,0.08)",
+            ),
+            height=360,
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(15,23,42,0.6)",
+            font=dict(family="Inter, sans-serif", color="#e2e8f0"),
+            margin=dict(l=40, r=20, t=50, b=40),
+            legend=dict(
+                bgcolor="rgba(15,23,42,0.7)",
+                bordercolor="rgba(59,130,246,0.15)",
+                borderwidth=1, font=dict(size=11),
+            ),
+            hoverlabel=dict(bgcolor="#1e293b", font_size=12, font_family="Inter"),
+        )
+        st.plotly_chart(fig_cash, use_container_width=True)
 
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1834,6 +2016,20 @@ with st.container():
             unsafe_allow_html=True,
         )
 
+
+# ============================================================
+# AUTO-INCREMENT — SIMULATION PLAYBACK ENGINE (NO time.sleep)
+# ============================================================
+if st.session_state.playing:
+    if st.session_state.current_step < _total_sim_steps:
+        st.session_state.current_step = min(
+            st.session_state.current_step + step_size,
+            _total_sim_steps,
+        )
+        st.rerun()
+    else:
+        # Reached the end — auto-pause
+        st.session_state.playing = False
 
 # ---- Footer ----
 st.markdown("---")
