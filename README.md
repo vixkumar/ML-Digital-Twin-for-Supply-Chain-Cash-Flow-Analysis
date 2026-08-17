@@ -33,12 +33,6 @@ An ML-driven Digital Twin framework integrating demand forecasting, stochastic d
 
 <br/>
 
-### 🧠 Standalone Experimental LSTM Neural Network Forecasting
-*Deep sequence modeling test predictions vs. ground truth demand alongside training loss convergence curve.*
-
-| LSTM Test Predictions | LSTM Training Loss |
-|:---:|:---:|
-| ![LSTM Predictions](docs/lstm_test_predictions.png) | ![LSTM Loss](docs/lstm_training_loss.png) |
 
 </div>
 
